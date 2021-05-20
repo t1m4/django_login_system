@@ -15,9 +15,13 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path, include
+from django.contrib.auth import views as accounts_views
+
+from login import auth_views
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('login.urls')),
     path('accounts/', include('django.contrib.auth.urls')),
+    path('accounts/1', auth_views.MyPasswordResetView.as_view()),
 ]
