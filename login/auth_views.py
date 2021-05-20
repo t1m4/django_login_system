@@ -1,7 +1,7 @@
 import asyncio
 
 from asgiref.sync import sync_to_async
-from django.contrib.auth import REDIRECT_FIELD_NAME, login
+from django.contrib.auth import REDIRECT_FIELD_NAME, login, logout
 from django.contrib.auth.forms import AuthenticationForm
 from django.contrib.auth.hashers import check_password
 from django.contrib.auth.models import User
@@ -12,6 +12,7 @@ from django.shortcuts import render, redirect
 # Create your views here.
 from django.urls import reverse
 from django.utils.decorators import classonlymethod
+from django.utils.http import is_safe_url
 from django.views import View
 
 from login.forms import LoginForm
@@ -30,7 +31,7 @@ class IndexView(AsyncView):
     async def get(self, request, *args, **kwargs):
         return HttpResponse('ok', status=200)
 
-class MyLoginView(AsyncView, SuccessURLAllowedHostsMixin):
+class MyLoginView(AsyncView):
     form_class = LoginForm
     redirect_field_name = REDIRECT_FIELD_NAME
     success_url = 'login-index'
@@ -61,7 +62,6 @@ class MyLoginView(AsyncView, SuccessURLAllowedHostsMixin):
         :return:
         """
         user = await get_object_or_none(User, username=form.cleaned_data.get('username'))
-        print(form.error_messages)
         if user:
             if check_password(form.cleaned_data.get('password'), user.password):
                 await sync_to_async(login)(request, user)
@@ -76,6 +76,19 @@ class MyLoginView(AsyncView, SuccessURLAllowedHostsMixin):
     async def form_invalid(self, request, form, *args, **kwargs):
         return render(request, self.template_name, self.context)
 
+
+class MyLogoutView(AsyncView):
+    redirect_field_name = REDIRECT_FIELD_NAME
+    # template_name = 'registration/logged_out.html'
+    template_name = 'registration/logout.html'
+    context = {}
+
+    async def get(self, request, *args, **kwargs):
+        await sync_to_async(logout)(request)
+        return render(request, self.template_name, self.context)
+
+    async def post(self, request, *args, **kwargs):
+        return await self.get(request, *args, **kwargs)
 
 class MyPasswordResetView(PasswordResetView):
     from_email = EMAIL_HOST_USER

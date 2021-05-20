@@ -6,4 +6,5 @@ from login import auth_views
 urlpatterns = [
     path('', auth_views.IndexView.as_view(), name='login-index'),
     path('accounts/async_login/', auth_views.MyLoginView.as_view(), name='login-async_login'),
+    path('accounts/async_logout/', auth_views.MyLogoutView.as_view(), name='logout-async_login'),
 ]
