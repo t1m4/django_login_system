@@ -108,6 +108,13 @@ class MyLoginView(AsyncView):
 
     @sync_to_async()
     def set_session_key(self, request, key, value):
+        """
+        set any session key in async way
+        :param request:
+        :param key:
+        :param value:
+        :return:
+        """
         request.session[key] = value
 
 
