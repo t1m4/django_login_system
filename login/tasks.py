@@ -17,12 +17,33 @@ async def send_reset_mail(user, token, email, *args, **kwargs):
         <br><br>
         Thanks for using our site!
         <br><br>
-        The 127.0.0.1:8000 team""", username=user.username, url=reverse('login-async_reset_confirm', kwargs={'uidhex': uidhex, 'token':token}))
+        The 127.0.0.1:8000 team""", username=user.username,
+                               url=reverse('login-async_reset_confirm', kwargs={'uidhex': uidhex, 'token': token}))
     send_mail(
         'Password Reset',
         'Here is the message.',
         EMAIL_HOST_USER,
         [email],
+        html_message=html_message,
+        fail_silently=False,
+    )
+
+
+async def send_code_mail(user, code, *args, **kwargs):
+    html_message = format_html("""You're receiving this email because you're login for your user account at 127.0.0.1:8000.
+        <br><br>
+        Your username, in case you’ve forgotten: {username}
+        <br><br>
+        Your code, <b>{code}</b>
+        <br><br>
+        Thanks for using our site!
+        <br><br>
+        The 127.0.0.1:8000 team""", username=user.username, code=code)
+    send_mail(
+        'Two factor code',
+        'Here is the message.',
+        EMAIL_HOST_USER,
+        [user.email],
         html_message=html_message,
         fail_silently=False,
     )

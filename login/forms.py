@@ -21,6 +21,14 @@ class LoginForm(forms.Form):
         'inactive': _("This account is inactive."),
     }
 
+class TwoFactorForm(forms.Form):
+    code = forms.IntegerField()
+    error_messages = {
+            'invalid_code': _(
+            "Please enter a correct code."
+        ),
+    }
+
 class PasswordResetForm(forms.Form):
     email = forms.EmailField(
         label=_("Email"),
