@@ -45,9 +45,11 @@ class MyLoginView(AsyncView):
     success_url = 'login-index'
     template_name = 'registration/login.html'
 
+    # You can enable two factor email authentication
     two_factor_authentication = False
     two_factor_success_url = 'login-async_two_factor'
     cache_timeout = 60 * 60
+    code_length = 6
 
     # TODO and recaptcha_enabled in log in page
     recaptcha_enabled = False
@@ -80,6 +82,7 @@ class MyLoginView(AsyncView):
                 if self.two_factor_authentication:
                     await self.send_code(user)
                     await self.set_session_key(request, "_auth_user_id", user.id)
+                    # Save in cache how many times user try to send code
                     cache.set("_auth_user_{id}_count".format(id=user.id), 0)
                     return redirect(reverse(self.two_factor_success_url))
                 else:
@@ -97,7 +100,9 @@ class MyLoginView(AsyncView):
         return render(request, self.template_name, self.context)
 
     async def send_code(self, user, *args, **kwargs):
-        code = random.randint(100000, 999999)
+        start = int("1" + (self.code_length-1)*"0")
+        end = int(self.code_length*"9")
+        code = random.randint(start, end)
         cache.set(user.id, code, self.cache_timeout)
         await send_code_mail(user, code)
 
@@ -113,6 +118,7 @@ class TwoFactorAuthentication(AsyncView):
     context = {}
 
     async def get(self, request, *args, **kwargs):
+        # Check that user have access to this point
         if await self.check_session(request):
             form = self.form_class()
             self.context['form'] = form
@@ -122,6 +128,7 @@ class TwoFactorAuthentication(AsyncView):
 
     async def post(self, request, *args, **kwargs):
         form = self.form_class(request.POST)
+        # Check that user have access to this point
         if await self.check_session(request):
             if form.is_valid():
                 return await self.form_valid(request, form)
@@ -138,7 +145,6 @@ class TwoFactorAuthentication(AsyncView):
         :param kwargs:
         :return:
         """
-        # id = await sync_to_async(request.session.get)('_auth_user_id')
         id = await self.check_session(request)
         id_count = cache.incr('_auth_user_{id}_count'.format(id=id))
         user = await get_object_or_none(User, id=id)
