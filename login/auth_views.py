@@ -43,7 +43,57 @@ class MyLoginView(AsyncView):
     success_url = 'login-index'
     template_name = 'registration/login.html'
     two_factor_authentication = False
+    two_factor_success_url = ''
+    # TODO and two_factor_authentication
     recaptcha_enabled = False
+    # TODO and recaptcha_enabled in log in page
+    extra_context = None
+    context = {}
+
+    async def get(self, request, *args, **kwargs):
+        form = self.form_class()
+        self.context['form'] = form
+        return render(request, self.template_name, self.context)
+
+    async def post(self, request, *args, **kwargs):
+        form = self.form_class(request.POST)
+        if form.is_valid():
+            return await self.form_valid(request, form)
+        else:
+            return await self.form_invalid(request, form)
+
+    async def form_valid(self, request, form, *args, **kwargs):
+        """
+        When form is valid
+        :param form:
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        user = await get_object_or_none(User, username=form.cleaned_data.get('username'))
+        if user:
+            if check_password(form.cleaned_data.get('password'), user.password):
+                await sync_to_async(login)(request, user)
+                return redirect(reverse(self.success_url))
+            else:
+                form.add_error(None, form.error_messages.get('invalid_login'))
+        else:
+            form.add_error(None, form.error_messages.get('invalid_login'))
+        self.context['form'] = form
+        return render(request, self.template_name, self.context)
+
+    async def form_invalid(self, request, form, *args, **kwargs):
+        return render(request, self.template_name, self.context)
+
+class TwoFactorAuthentication(AsyncView):
+    form_class = LoginForm
+    redirect_field_name = REDIRECT_FIELD_NAME
+    success_url = 'login-index'
+    template_name = 'registration/login.html'
+    two_factor_authentication = False
+    # TODO and two_factor_authentication
+    recaptcha_enabled = False
+    # TODO and recaptcha_enabled in log in page
     extra_context = None
     context = {}
 
@@ -108,7 +158,7 @@ class MyPasswordResetView(AsyncView):
     template_name = 'registration/password_reset.html'
     context = {}
     token_generator = default_token_generator
-
+    cache_timeout = 60 * 30
     async def get(self, request, *args, **kwargs):
         form = self.form_class()
         self.context['form'] = form
@@ -134,7 +184,8 @@ class MyPasswordResetView(AsyncView):
         if user:
             # Generate token and send it to user
             token = self.token_generator.make_token(user)
-            cache.set(user.id, token)
+            # set token in cache for TIMEOUT minutes
+            cache.set(user.id, token, self.cache_timeout)
             await send_reset_mail(user, token, email)
         else:
             form.add_error(None, form.error_messages.get('invalid_email'))
@@ -200,14 +251,17 @@ class MyPasswordResetConfirmView(AsyncView):
         if form.cleaned_data.get('new_password1') != form.cleaned_data.get('new_password2'):
             form.add_error(None, form.error_messages.get('password_mismatch'))
         else:
-            user = await get_object_or_none(User, id=int(uidhex, 0))
+            id = int(uidhex, 0)
+            user = await get_object_or_none(User, id=id)
             await form.save(user)
+            cache.delete(id)
             return redirect(reverse(self.success_url))
         self.context['form'] = form
         return render(request, self.template_name, self.context)
 
     async def form_invalid(self, request, form, *args, **kwargs):
-        return render(request, self.template_name, self.context)
+        # return render(request, self.template_name, self.context)
+        return HttpResponse('Not Found', status=404)
 
 
 class MyPasswordResetCompleteView(AsyncView):
