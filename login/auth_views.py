@@ -11,12 +11,13 @@ from django.http import HttpResponse
 from django.shortcuts import render, redirect
 # Create your views here.
 from django.urls import reverse
-from django.utils.decorators import classonlymethod
+from django.utils.decorators import classonlymethod, method_decorator
 from django.views import View
 
+from login.decorators import check_recaptcha
 from login.forms import LoginForm, PasswordResetForm, PasswordForm, TwoFactorForm
 from login.tasks import send_reset_mail, send_code_mail
-from login.tools import get_object_or_none
+from login.tools import get_object_or_none, async_check_recaptcha
 
 
 class AsyncView(View):
@@ -35,7 +36,7 @@ class IndexView(AsyncView):
     async def get(self, request, *args, **kwargs):
         return HttpResponse('ok', status=200)
 
-
+@method_decorator(check_recaptcha, name='dispatch')
 class MyLoginView(AsyncView):
     """
     Use email for login
@@ -51,18 +52,29 @@ class MyLoginView(AsyncView):
     cache_timeout = 60 * 60
     code_length = 6
 
-    # TODO and recaptcha_enabled in log in page
-    recaptcha_enabled = False
+    recaptcha_enabled = True
     extra_context = None
     context = {}
 
     async def get(self, request, *args, **kwargs):
         form = self.form_class()
         self.context['form'] = form
+        if self.recaptcha_enabled:
+            self.context['recaptcha_enabled'] = True
+
         return render(request, self.template_name, self.context)
 
     async def post(self, request, *args, **kwargs):
         form = self.form_class(request.POST)
+
+        if self.recaptcha_enabled:
+            # loop = asyncio.get_event_loop()
+            # loop.create_task(async_check_recaptcha(request))
+            # check valid recaptcha
+            if not request.recaptcha_is_valid:
+                return render(request, self.template_name, self.context)
+                form.add_error(None, form.error_messages.get('invalid_recaptcha'))
+
         if form.is_valid():
             return await self.form_valid(request, form)
         else:

@@ -130,9 +130,11 @@ STATIC_URL = '/static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Email config
-# EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
 EMAIL_HOST = env.str('EMAIL_HOST', 'smtp.gmail.com')
 EMAIL_PORT = env.int('EMAIL_PORT', 587)
 EMAIL_HOST_USER = env.str('EMAIL_HOST_USER', 'test@gmail.com')
 EMAIL_HOST_PASSWORD = env.str('EMAIL_HOST_PASSWORD', 'test')
 EMAIL_USE_TLS = True
+
+# Google ReCaptcha config
+GOOGLE_RECAPTCHA_SECRET_KEY = env.str("GOOGLE_RECAPTCHA_SECRET_KEY")

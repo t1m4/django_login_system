@@ -19,6 +19,7 @@ class LoginForm(forms.Form):
             "fields may be case-sensitive."
         ),
         'inactive': _("This account is inactive."),
+        'invalid_recaptcha': _("This recaptcha is not valid."),
     }
 
 class TwoFactorForm(forms.Form):
