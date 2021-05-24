@@ -1,7 +1,6 @@
 import asyncio
 import random
 
-import httpx
 from asgiref.sync import sync_to_async
 from django.contrib.auth import REDIRECT_FIELD_NAME, login, logout
 from django.contrib.auth.hashers import check_password
@@ -12,10 +11,9 @@ from django.http import HttpResponse
 from django.shortcuts import render, redirect
 # Create your views here.
 from django.urls import reverse
-from django.utils.decorators import classonlymethod, method_decorator
+from django.utils.decorators import classonlymethod
 from django.views import View
 
-from login.decorators import check_recaptcha
 from login.forms import LoginForm, PasswordResetForm, PasswordForm, TwoFactorForm
 from login.tasks import send_reset_mail, send_code_mail
 from login.tools import get_object_or_none, async_check_recaptcha
@@ -38,8 +36,6 @@ class IndexView(AsyncView):
         return HttpResponse('ok', status=200)
 
 
-
-# @method_decorator(check_recaptcha, name='dispatch')
 class MyLoginView(AsyncView):
     """
     Use email for login
@@ -112,8 +108,8 @@ class MyLoginView(AsyncView):
         return render(request, self.template_name, self.context)
 
     async def send_code(self, user, *args, **kwargs):
-        start = int("1" + (self.code_length-1)*"0")
-        end = int(self.code_length*"9")
+        start = int("1" + (self.code_length - 1) * "0")
+        end = int(self.code_length * "9")
         code = random.randint(start, end)
         cache.set(user.id, code, self.cache_timeout)
         await send_code_mail(user, code)
@@ -192,9 +188,9 @@ class TwoFactorAuthentication(AsyncView):
         except:
             return None
 
+
 class MyLogoutView(AsyncView):
     redirect_field_name = REDIRECT_FIELD_NAME
-    # template_name = 'registration/logged_out.html'
     template_name = 'registration/logout.html'
     context = {}
 
@@ -218,14 +214,24 @@ class MyPasswordResetView(AsyncView):
     context = {}
     token_generator = default_token_generator
     cache_timeout = 60 * 30
+    recaptcha_enabled = True
+
 
     async def get(self, request, *args, **kwargs):
         form = self.form_class()
         self.context['form'] = form
+        if self.recaptcha_enabled:
+            self.context['recaptcha_enabled'] = True
         return render(request, self.template_name, self.context)
 
     async def post(self, request, *args, **kwargs):
         form = self.form_class(request.POST)
+        if self.recaptcha_enabled:
+            await async_check_recaptcha(request)
+            # check valid recaptcha
+            if not request.recaptcha_is_valid:
+                return render(request, self.template_name, self.context)
+
         if form.is_valid():
             return await self.form_valid(request, form)
         else:
