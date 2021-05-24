@@ -1,6 +1,7 @@
 import asyncio
 import random
 
+import httpx
 from asgiref.sync import sync_to_async
 from django.contrib.auth import REDIRECT_FIELD_NAME, login, logout
 from django.contrib.auth.hashers import check_password
@@ -36,7 +37,9 @@ class IndexView(AsyncView):
     async def get(self, request, *args, **kwargs):
         return HttpResponse('ok', status=200)
 
-@method_decorator(check_recaptcha, name='dispatch')
+
+
+# @method_decorator(check_recaptcha, name='dispatch')
 class MyLoginView(AsyncView):
     """
     Use email for login
@@ -52,7 +55,7 @@ class MyLoginView(AsyncView):
     cache_timeout = 60 * 60
     code_length = 6
 
-    recaptcha_enabled = True
+    recaptcha_enabled = False
     extra_context = None
     context = {}
 
@@ -66,14 +69,11 @@ class MyLoginView(AsyncView):
 
     async def post(self, request, *args, **kwargs):
         form = self.form_class(request.POST)
-
         if self.recaptcha_enabled:
-            # loop = asyncio.get_event_loop()
-            # loop.create_task(async_check_recaptcha(request))
+            await async_check_recaptcha(request)
             # check valid recaptcha
             if not request.recaptcha_is_valid:
                 return render(request, self.template_name, self.context)
-                form.add_error(None, form.error_messages.get('invalid_recaptcha'))
 
         if form.is_valid():
             return await self.form_valid(request, form)

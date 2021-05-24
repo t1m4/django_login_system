@@ -19,6 +19,13 @@ async def get_object_or_none(klass, *args, **kwargs):
         return None
 
 async def async_check_recaptcha(request, *args, **kwargs):
+    """
+    This better way to use httpx with django. It help user non-block requests.
+    :param request:
+    :param args:
+    :param kwargs:
+    :return:
+    """
     request.recaptcha_is_valid = None
     if request.method == 'POST':
         recaptcha_response = request.POST.get('g-recaptcha-response')
@@ -26,20 +33,12 @@ async def async_check_recaptcha(request, *args, **kwargs):
             'secret': settings.GOOGLE_RECAPTCHA_SECRET_KEY,
             'response': recaptcha_response
         }
-        # TODO don't send request
         async with httpx.AsyncClient() as client:
-            # r = await client.post('https://www.google.com/recaptcha/api/siteverify', data=data)
-            r = await client.get('https://evileg.com/ru/post/283/', timeout=5)
-            print('hello',r)
+            r = httpx.post('https://www.google.com/recaptcha/api/siteverify', data=data)
         result = r.json()
-        print(result)
         if result['success']:
             request.recaptcha_is_valid = True
         else:
             request.recaptcha_is_valid = False
             messages.error(request, 'Invalid reCAPTCHA. Please try again.')
     return request
-
-    wrap.__doc__ = function.__doc__
-    # wrap.__name__ = function.__name__
-    return wrap
