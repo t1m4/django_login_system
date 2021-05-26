@@ -31,9 +31,20 @@ class IndexView(AsyncView):
     """
     View for main info
     """
+    login_page = 'login-async_login'
 
     async def get(self, request, *args, **kwargs):
-        return HttpResponse('ok', status=200)
+        if await self.get_user_is_authenticated(request):
+            message = 'Ok. You have access on <a href={}>admin panel</a>'.format("/admin")
+            return HttpResponse(message, status=200)
+        else:
+            message = "You don't have . You have to login using this link <a href={}>login</a>".format(
+                reverse(self.login_page))
+            return HttpResponse(message, status=200)
+
+    @sync_to_async
+    def get_user_is_authenticated(self, request):
+        return request.user.is_authenticated
 
 
 class MyLoginView(AsyncView):
@@ -51,6 +62,7 @@ class MyLoginView(AsyncView):
     cache_timeout = 60 * 60
     code_length = 6
 
+    # You can enable recaptcha
     recaptcha_enabled = False
     extra_context = None
     context = {}
@@ -214,8 +226,7 @@ class MyPasswordResetView(AsyncView):
     context = {}
     token_generator = default_token_generator
     cache_timeout = 60 * 30
-    recaptcha_enabled = True
-
+    recaptcha_enabled = False
 
     async def get(self, request, *args, **kwargs):
         form = self.form_class()
