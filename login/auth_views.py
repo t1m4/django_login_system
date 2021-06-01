@@ -3,10 +3,11 @@ import random
 
 from asgiref.sync import sync_to_async
 from django.contrib.auth import REDIRECT_FIELD_NAME, login, logout
-from django.contrib.auth.hashers import check_password
+from django.contrib.auth.hashers import check_password, make_password
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
 from django.core.cache import cache
+from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
 # Create your views here.
@@ -14,7 +15,7 @@ from django.urls import reverse
 from django.utils.decorators import classonlymethod
 from django.views import View
 
-from login.forms import LoginForm, PasswordResetForm, PasswordForm, TwoFactorForm
+from login.forms import LoginForm, PasswordResetForm, PasswordForm, TwoFactorForm, RegisterForm
 from login.tasks import send_reset_mail, send_code_mail
 from login.tools import get_object_or_none, async_check_recaptcha
 
@@ -46,6 +47,102 @@ class IndexView(AsyncView):
     def get_user_is_authenticated(self, request):
         return request.user.is_authenticated
 
+class MyRegisterView(AsyncView):
+    """
+    Use email for login
+    """
+    form_class = RegisterForm
+    redirect_field_name = REDIRECT_FIELD_NAME
+    success_url = 'login-index'
+    template_name = 'registration/register.html'
+
+    # You can enable two factor email authentication
+    two_factor_confirm = True
+    two_factor_success_url = 'login-async_two_factor'
+    cache_timeout = 60 * 60
+    code_length = 6
+
+    # You can enable recaptcha
+    recaptcha_enabled = False
+    extra_context = None
+    context = {}
+
+    async def get(self, request, *args, **kwargs):
+        await self.print(request)
+        form = self.form_class()
+        self.context['form'] = form
+        if self.recaptcha_enabled:
+            self.context['recaptcha_enabled'] = True
+
+        return render(request, self.template_name, self.context)
+
+    async def post(self, request, *args, **kwargs):
+        form = self.form_class(request.POST)
+        if self.recaptcha_enabled:
+            await async_check_recaptcha(request)
+            # check valid recaptcha
+            if not request.recaptcha_is_valid:
+                return render(request, self.template_name, self.context)
+
+        if form.is_valid():
+            return await self.form_valid(request, form)
+        else:
+            return await self.form_invalid(request, form)
+
+    async def form_valid(self, request, form, *args, **kwargs):
+        """
+        When form is valid
+        :param form:
+        :param args:
+        :param kwargs:
+        :return:
+        """
+        username = form.cleaned_data.get('username')
+        email = form.cleaned_data.get('email')
+        password = form.cleaned_data.get('password')
+        double_password = form.cleaned_data.get('double_password')
+        user = await get_object_or_none(User, Q(username=username) | Q(email=email))
+        self.context['form'] = form
+        if user:
+            form.add_error(None, form.error_messages.get('user_exists'))
+        else:
+            if password != double_password:
+                form.add_error(None, form.error_messages.get('passwords_equals'))
+            else:
+                # delete double_password in form
+                del form.cleaned_data['double_password']
+                # hash password using django
+                form.cleaned_data['password'] = make_password(password)
+                form.cleaned_data['is_active'] = False
+                await sync_to_async(User.objects.create)(**form.cleaned_data)
+                # TODO send mail to active account with link
+                return redirect(reverse(self.success_url))
+        return render(request, self.template_name, self.context)
+
+    async def form_invalid(self, request, form, *args, **kwargs):
+        return render(request, self.template_name, self.context)
+
+    async def send_code(self, user, *args, **kwargs):
+        start = int("1" + (self.code_length - 1) * "0")
+        end = int(self.code_length * "9")
+        code = random.randint(start, end)
+        cache.set(user.id, code, self.cache_timeout)
+        await send_code_mail(user, code)
+
+    @sync_to_async()
+    def print(self, request, *args, **kwargs):
+        print(request.user.is_active)
+        print(args, kwargs)
+    @sync_to_async()
+    def set_session_key(self, request, key, value):
+        """
+        set any session key in async way
+        :param request:
+        :param key:
+        :param value:
+        :return:
+        """
+        request.session[key] = value
 
 class MyLoginView(AsyncView):
     """

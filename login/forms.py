@@ -6,6 +6,27 @@ from django.contrib.auth.hashers import make_password
 from django.utils.translation import gettext_lazy as _
 
 
+class RegisterForm(forms.Form):
+    username = forms.CharField(max_length=255)
+    email = forms.EmailField()
+    first_name = forms.CharField(max_length=30)
+    password = forms.CharField(
+        label=_("Password"),
+        strip=False,
+        widget=forms.PasswordInput(attrs={'autocomplete': 'current-password'}),
+    )
+    double_password = forms.CharField(
+        label=_("Double Password"),
+        strip=False,
+        widget=forms.PasswordInput(attrs={'autocomplete': 'current-password'}),
+    )
+    error_messages = {
+        'user_exists': _("User with that username or email already exists."),
+        'passwords_equals': _("Your passwords are not equal."),
+        'invalid_recaptcha': _("This recaptcha is not valid."),
+    }
+
+
 class LoginForm(forms.Form):
     username = UsernameField(widget=forms.TextInput(attrs={'autofocus': True}))
     password = forms.CharField(
@@ -22,13 +43,15 @@ class LoginForm(forms.Form):
         'invalid_recaptcha': _("This recaptcha is not valid."),
     }
 
+
 class TwoFactorForm(forms.Form):
     code = forms.IntegerField()
     error_messages = {
-            'invalid_code': _(
+        'invalid_code': _(
             "Please enter a correct code."
         ),
     }
+
 
 class PasswordResetForm(forms.Form):
     email = forms.EmailField(
@@ -41,6 +64,7 @@ class PasswordResetForm(forms.Form):
             "Please enter a correct email"
         ),
     }
+
 
 class PasswordForm(forms.Form):
     new_password1 = forms.CharField(
