@@ -3,20 +3,23 @@ import random
 
 from asgiref.sync import sync_to_async
 from django.contrib.auth import REDIRECT_FIELD_NAME, login, logout
+from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.hashers import check_password, make_password
+from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
+from django.contrib.auth.views import redirect_to_login
 from django.core.cache import cache
 from django.db.models import Q
 from django.http import HttpResponse
 from django.shortcuts import render, redirect
 # Create your views here.
 from django.urls import reverse
-from django.utils.decorators import classonlymethod
+from django.utils.decorators import classonlymethod, method_decorator
 from django.views import View
 
 from login.forms import LoginForm, PasswordResetForm, PasswordForm, TwoFactorForm, RegisterForm
-from login.tasks import send_reset_mail, send_code_mail
+from login.tasks import send_reset_mail, send_code_mail, send_confirm_mail
 from login.tools import get_object_or_none, async_check_recaptcha
 
 
@@ -27,8 +30,26 @@ class AsyncView(View):
         view._is_coroutine = asyncio.coroutines._is_coroutine
         return view
 
+class MyLoginRequiredMixin(AsyncView):
+    """
+    Check that user is logged in account. If not logged in then redirect to login page else pass to destination
+    """
+    redirect_field_name = REDIRECT_FIELD_NAME
+    login_url = 'login-async_login'
 
-class IndexView(AsyncView):
+    async def dispatch(self, request, *args, **kwargs):
+        if not await self.get_user_is_authenticated(request):
+            # redirect to login page with params next
+            return redirect_to_login(self.request.get_full_path(), self.login_url, self.redirect_field_name)
+        return await super().dispatch(request, *args, **kwargs)
+    @sync_to_async()
+    def get_user_is_authenticated(self, request):
+        """
+        Return user authenticated
+        """
+        return request.user.is_authenticated
+
+class IndexView(MyLoginRequiredMixin):
     """
     View for main info
     """
@@ -39,13 +60,14 @@ class IndexView(AsyncView):
             message = 'Ok. You have access on <a href={}>admin panel</a>'.format("/admin")
             return HttpResponse(message, status=200)
         else:
-            message = "You don't have . You have to login using this link <a href={}>login</a>".format(
+            message = "You don't have access. You have to login using this link <a href={}>login</a>".format(
                 reverse(self.login_page))
             return HttpResponse(message, status=200)
 
     @sync_to_async
     def get_user_is_authenticated(self, request):
         return request.user.is_authenticated
+
 
 class MyRegisterView(AsyncView):
     """
@@ -58,7 +80,8 @@ class MyRegisterView(AsyncView):
 
     # You can enable two factor email authentication
     two_factor_confirm = True
-    two_factor_success_url = 'login-async_two_factor'
+    token_generator = default_token_generator
+    two_factor_success_url = 'login-index'
     cache_timeout = 60 * 60
     code_length = 6
 
@@ -68,7 +91,6 @@ class MyRegisterView(AsyncView):
     context = {}
 
     async def get(self, request, *args, **kwargs):
-        await self.print(request)
         form = self.form_class()
         self.context['form'] = form
         if self.recaptcha_enabled:
@@ -114,35 +136,51 @@ class MyRegisterView(AsyncView):
                 # hash password using django
                 form.cleaned_data['password'] = make_password(password)
                 form.cleaned_data['is_active'] = False
-                await sync_to_async(User.objects.create)(**form.cleaned_data)
-                # TODO send mail to active account with link
+                user = await sync_to_async(User.objects.create)(**form.cleaned_data)
+                # Generate token and send it to user
+                token = self.token_generator.make_token(user)
+                # set token in cache for TIMEOUT minutes
+                cache.set(user.id, token, self.cache_timeout)
+                await send_confirm_mail(user, token, email)
                 return redirect(reverse(self.success_url))
         return render(request, self.template_name, self.context)
 
     async def form_invalid(self, request, form, *args, **kwargs):
         return render(request, self.template_name, self.context)
 
-    async def send_code(self, user, *args, **kwargs):
-        start = int("1" + (self.code_length - 1) * "0")
-        end = int(self.code_length * "9")
-        code = random.randint(start, end)
-        cache.set(user.id, code, self.cache_timeout)
-        await send_code_mail(user, code)
 
-    @sync_to_async()
-    def print(self, request, *args, **kwargs):
-        print(request.user.is_active)
-        print(args, kwargs)
-    @sync_to_async()
-    def set_session_key(self, request, key, value):
-        """
-        set any session key in async way
-        :param request:
-        :param key:
-        :param value:
-        :return:
-        """
-        request.session[key] = value
+class MyAccountConfirmView(AsyncView):
+    template_name = 'registration/account_confirm.html'
+    context = {}
+    success_url = "login-index"
+
+    async def get(self, request, uidhex, token, *args, **kwargs):
+        check_valid = await self.check_valid_token(uidhex, token)
+        if check_valid:
+            id = int("0x" + uidhex, 0)
+            user = await get_object_or_none(User, id=id)
+            await sync_to_async(login)(request, user)
+            await self.update_user(user)
+            return redirect(reverse(self.success_url))
+        else:
+            return HttpResponse('Not Found', status=404)
+
+    async def check_valid_token(self, uidhex, token, *args, **kwargs):
+        try:
+            id = int("0x" + uidhex, 0)
+        except:
+            return False
+        cache_token = cache.get(id)
+        if cache_token == token:
+            return True
+        else:
+            return False
+
+    @sync_to_async
+    def update_user(self, user, *args, **kwargs):
+        user.is_active = True
+        user.save()
+
 
 class MyLoginView(AsyncView):
     """
@@ -406,7 +444,7 @@ class MyPasswordResetConfirmView(AsyncView):
 
     async def check_valid_token(self, uidhex, token, *args, **kwargs):
         try:
-            id = int(uidhex, 0)
+            id = int("0x" + uidhex, 0)
         except:
             return False
         cache_token = cache.get(id)
@@ -427,7 +465,7 @@ class MyPasswordResetConfirmView(AsyncView):
         if form.cleaned_data.get('new_password1') != form.cleaned_data.get('new_password2'):
             form.add_error(None, form.error_messages.get('password_mismatch'))
         else:
-            id = int(uidhex, 0)
+            id = int("0x" + uidhex, 0)
             user = await get_object_or_none(User, id=id)
             await form.save(user)
             cache.delete(id)
