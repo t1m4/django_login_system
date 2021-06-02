@@ -231,7 +231,7 @@ class MyLoginView(AsyncView):
         :param kwargs:
         :return:
         """
-        user = await get_object_or_none(User, username=form.cleaned_data.get('username'))
+        user = await get_object_or_none(User, Q(username=form.cleaned_data.get('username')) & Q(is_active=True))
         if user:
             if check_password(form.cleaned_data.get('password'), user.password):
                 if self.two_factor_authentication:
