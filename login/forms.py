@@ -3,6 +3,7 @@ from django import forms
 from django.contrib.auth import password_validation
 from django.contrib.auth.forms import UsernameField
 from django.contrib.auth.hashers import make_password
+from django.contrib.auth.password_validation import validate_password
 from django.utils.translation import gettext_lazy as _
 
 
@@ -14,6 +15,8 @@ class RegisterForm(forms.Form):
         label=_("Password"),
         strip=False,
         widget=forms.PasswordInput(attrs={'autocomplete': 'current-password'}),
+        # THIS IS PASSWORD VALIDATION. ON IT IN PRODUCTION
+        # validators=[validate_password]
     )
     double_password = forms.CharField(
         label=_("Double Password"),

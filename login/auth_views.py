@@ -3,9 +3,7 @@ import random
 
 from asgiref.sync import sync_to_async
 from django.contrib.auth import REDIRECT_FIELD_NAME, login, logout
-from django.contrib.auth.decorators import login_required, user_passes_test
 from django.contrib.auth.hashers import check_password, make_password
-from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib.auth.models import User
 from django.contrib.auth.tokens import default_token_generator
 from django.contrib.auth.views import redirect_to_login
@@ -15,7 +13,7 @@ from django.http import HttpResponse
 from django.shortcuts import render, redirect
 # Create your views here.
 from django.urls import reverse
-from django.utils.decorators import classonlymethod, method_decorator
+from django.utils.decorators import classonlymethod
 from django.views import View
 
 from login.forms import LoginForm, PasswordResetForm, PasswordForm, TwoFactorForm, RegisterForm
@@ -30,6 +28,7 @@ class AsyncView(View):
         view._is_coroutine = asyncio.coroutines._is_coroutine
         return view
 
+
 class MyLoginRequiredMixin(AsyncView):
     """
     Check that user is logged in account. If not logged in then redirect to login page else pass to destination
@@ -42,12 +41,14 @@ class MyLoginRequiredMixin(AsyncView):
             # redirect to login page with params next
             return redirect_to_login(self.request.get_full_path(), self.login_url, self.redirect_field_name)
         return await super().dispatch(request, *args, **kwargs)
+
     @sync_to_async()
     def get_user_is_authenticated(self, request):
         """
         Return user authenticated
         """
         return request.user.is_authenticated
+
 
 class IndexView(MyLoginRequiredMixin):
     """
@@ -105,7 +106,6 @@ class MyRegisterView(AsyncView):
             # check valid recaptcha
             if not request.recaptcha_is_valid:
                 return render(request, self.template_name, self.context)
-
         if form.is_valid():
             return await self.form_valid(request, form)
         else:
@@ -146,6 +146,7 @@ class MyRegisterView(AsyncView):
         return render(request, self.template_name, self.context)
 
     async def form_invalid(self, request, form, *args, **kwargs):
+        self.context['form'] = form
         return render(request, self.template_name, self.context)
 
 
@@ -252,6 +253,7 @@ class MyLoginView(AsyncView):
         return render(request, self.template_name, self.context)
 
     async def form_invalid(self, request, form, *args, **kwargs):
+        self.context['form'] = form
         return render(request, self.template_name, self.context)
 
     async def send_code(self, user, *args, **kwargs):
@@ -326,6 +328,7 @@ class TwoFactorAuthentication(AsyncView):
         return render(request, self.template_name, self.context)
 
     async def form_invalid(self, request, form, *args, **kwargs):
+        self.context['form'] = form
         return render(request, self.template_name, self.context)
 
     async def check_session(self, request):
@@ -405,6 +408,7 @@ class MyPasswordResetView(AsyncView):
         return redirect(reverse(self.success_url))
 
     async def form_invalid(self, request, form, *args, **kwargs):
+        self.context['form'] = form
         return render(request, self.template_name, self.context)
 
 
