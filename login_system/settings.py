@@ -160,7 +160,7 @@ LOGGING = {
         'file': {
             'level': 'DEBUG',
             'class': 'logging.FileHandler',
-            'filename': BASE_DIR / 'debug.log',
+            'filename': BASE_DIR / env.str("LOGGER_FILE",'debug.log'),
         },
     },
     'loggers': {
