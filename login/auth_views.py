@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import random
 
 from asgiref.sync import sync_to_async
@@ -19,7 +20,8 @@ from django.views import View
 from login.forms import LoginForm, PasswordResetForm, PasswordForm, TwoFactorForm, RegisterForm
 from login.tasks import send_reset_mail, send_code_mail, send_confirm_mail
 from login.tools import get_object_or_none, async_check_recaptcha
-
+logger = logging.getLogger('info_logger')
+logger_django = logging.getLogger('django')
 
 class AsyncView(View):
     @classonlymethod
